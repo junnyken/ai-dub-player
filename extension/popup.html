@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Dub Player — YouTube</title>
+    <style>
+      :root {
+        --bg: #0b0f17;
+        --surface: #111827;
+        --surface-2: #1f2937;
+        --text-primary: #f9fafb;
+        --text-secondary: #9ca3af;
+        --primary: #2563eb;
+        --success: #16a34a;
+      }
+      body {
+        margin: 0;
+        width: 350px;
+        background: var(--bg);
+        color: var(--text-primary);
+        font-family: "Be Vietnam Pro", system-ui, -apple-system, sans-serif;
+        padding: 14px;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--surface-2);
+        border-radius: 10px;
+        padding: 12px;
+        margin-bottom: 10px;
+      }
+      .title {
+        font-size: 14px;
+        font-weight: 700;
+        margin: 0 0 4px;
+      }
+      .subtitle {
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin: 0;
+        line-height: 1.45;
+      }
+      .label {
+        display: block;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        margin-bottom: 6px;
+      }
+      .input {
+        width: 100%;
+        box-sizing: border-box;
+        border-radius: 6px;
+        border: 1px solid var(--surface-2);
+        background: var(--bg);
+        color: var(--text-primary);
+        padding: 7px 10px;
+        font-size: 12px;
+      }
+      .btn {
+        margin-top: 10px;
+        width: 100%;
+        border: 0;
+        border-radius: 6px;
+        background: var(--primary);
+        color: var(--text-primary);
+        font-weight: 600;
+        font-size: 12px;
+        padding: 8px 12px;
+        cursor: pointer;
+      }
+      .btn-secondary {
+        margin-top: 8px;
+        width: 100%;
+        border: 1px solid var(--surface-2);
+        border-radius: 6px;
+        background: var(--surface-2);
+        color: var(--text-primary);
+        font-weight: 600;
+        font-size: 11px;
+        padding: 7px 10px;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1 class="title">AI Dub Player — YouTube</h1>
+      <p id="popup-status" class="subtitle">
+        Mở một video YouTube để lồng tiếng Việt theo từng nhân vật.
+      </p>
+      <button id="popup-trigger-btn" class="btn" type="button">
+        Lồng tiếng Việt bằng AI
+      </button>
+    </div>
+
+    <div class="card">
+      <label class="label" for="popup-server-url-input">
+        Địa chỉ Website / Server (Dùng khi cập nhật lên tên miền thật)
+      </label>
+      <input
+        id="popup-server-url-input"
+        class="input"
+        type="url"
+        placeholder="https://your-domain.com hoặc http://localhost:3000"
+      />
+      <button id="popup-save-server-btn" class="btn-secondary" type="button">
+        Lưu &amp; Kiểm tra kết nối Website
+      </button>
+      <p id="popup-server-status" class="subtitle" style="margin-top: 6px">
+        Đang kiểm tra kết nối máy chủ...
+      </p>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

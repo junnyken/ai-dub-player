@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "AI Dub Player — YouTube Vietnamese Dubbing",
+  "version": "1.0.0",
+  "description": "Xem video YouTube bằng tiếng Việt với giọng AI theo từng nhân vật và khớp nhịp ngữ cảnh.",
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": [
+    "https://www.youtube.com/*",
+    "https://m.youtube.com/*",
+    "http://localhost:3000/*",
+    "http://127.0.0.1:3000/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none';"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/watch*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}

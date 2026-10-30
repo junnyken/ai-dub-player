@@ -1,0 +1,389 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  passwordHash  String
+  name          String
+  plan          String         @default("free") // "free" | "pro" | "business"
+  creditBalance Int            @default(15)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  dubJobs         DubJob[]
+  uploadedFiles   UploadedFile[]
+  creditLedger    CreditLedger[]
+  sessions        AuthSession[]
+  eventLogs       JobEventLog[]
+  glossaryEntries GlossaryEntry[]
+  voicePresets    VoicePreset[]
+}
+
+model AuthSession {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model UploadedFile {
+  id              String   @id
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  originalName    String
+  storageKey      String
+  mimeType        String
+  extension       String
+  sizeBytes       Int
+  durationSeconds Int
+  hasAudioTrack   Boolean  @default(true)
+  rightsConfirmed Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  expiresAt       DateTime
+
+  dubJobs         DubJob[]
+}
+
+model DubJob {
+  id                  String          @id
+  userId              String
+  user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceType          String          // "youtube" | "upload"
+  sourceUrl           String?
+  sourceVideoId       String?
+  sourceFileId        String?
+  uploadedFile        UploadedFile?   @relation(fields: [sourceFileId], references: [id])
+  title               String?
+  durationSeconds     Int?
+  sourceLanguage      String?
+  targetLanguage      String          @default("vi")
+  status              String          @default("queued") // DubJobStatus
+  progress            Int             @default(0)
+  currentStageMessage String?
+  readyFromMs         Int             @default(0)
+  readyToMs           Int             @default(0)
+  errorCode           String?
+  errorMessage        String?
+  creditEstimated     Int
+  creditSpent         Int             @default(0)
+  clientType          String          @default("web") // "web" | "extension"
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  mediaAssets         MediaAsset[]
+  queueRecords        JobQueueRecord[]
+  creditEntries       CreditLedger[]
+  eventLogs           JobEventLog[]
+  transcript          Transcript?
+  speakers            Speaker[]
+  translation         Translation?
+  glossaryEntries     GlossaryEntry[]
+  voiceAssignments    VoiceAssignment[]
+  audioSegments       AudioSegment[]
+  subtitleTracks      SubtitleTrack[]
+
+  @@index([userId, status])
+  @@index([userId, sourceVideoId, targetLanguage])
+  @@index([userId, sourceFileId, targetLanguage])
+}
+
+model MediaAsset {
+  id         String    @id @default(cuid())
+  jobId      String
+  job        DubJob    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  kind       String    // "source_video" | "source_audio" | "dub_audio_segment" | "subtitle" | "thumbnail"
+  storageKey String
+  mimeType   String?
+  sizeBytes  Int?
+  durationMs Int?
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([jobId, kind])
+}
+
+model JobQueueRecord {
+  id          String    @id @default(cuid())
+  jobId       String
+  job         DubJob    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  queueName   String    @default("dub-ingest-queue")
+  stage       String    @default("ingest")
+  state       String    @default("waiting") // "waiting" | "active" | "completed" | "failed"
+  attempts    Int       @default(0)
+  payloadJson String
+  error       String?
+  enqueuedAt  DateTime  @default(now())
+  startedAt   DateTime?
+  finishedAt  DateTime?
+
+  @@index([jobId, state])
+}
+
+model CreditLedger {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobId        String?
+  job          DubJob?  @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  delta        Int
+  reason       String   // "initial_grant" | "job_ingest_deduct" | "job_refund" | "topup"
+  balanceAfter Int
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([jobId])
+}
+
+model JobEventLog {
+  id          String   @id @default(cuid())
+  jobId       String
+  job         DubJob   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientType  String
+  sourceType  String
+  provider    String
+  stage       String
+  durationMs  Int
+  status      String
+  errorCode   String?
+  creditSpent Int
+  message     String
+  readyFromMs Int      @default(0)
+  readyToMs   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([jobId, createdAt])
+}
+
+model Speaker {
+  id                String              @id @default(cuid())
+  jobId             String
+  job               DubJob              @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  externalSpeakerId String              // "SPEAKER_00"
+  displayName       String              // "Speaker 1"
+  estimatedAgeGroup String?             // "child" | "teen" | "young_adult" | "adult" | "senior"
+  apparentGender    String?             // "female" | "male" | "neutral" | "unknown"
+  roleHint          String?             // "main_character" | "narrator" | "interviewer" | "background"
+  emotionProfile    String?             // JSON array string e.g. '["calm","informative"]'
+  appearanceCount   Int                 @default(0)
+  isEstimated       Boolean             @default(true)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  segments          TranscriptSegment[]
+  voiceAssignment   VoiceAssignment?
+  audioSegments     AudioSegment[]
+
+  @@unique([jobId, externalSpeakerId])
+  @@index([jobId])
+}
+
+model Transcript {
+  id        String                      @id @default(cuid())
+  jobId     String                      @unique
+  job       DubJob                      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  language  String                      @default("en")
+  source    String                      @default("asr") // "asr" | "captions"
+  provider  String                      @default("acoustic-asr")
+  status    String                      @default("processing") // "processing" | "ready" | "failed"
+  version   Int                         @default(1)
+  createdAt DateTime                    @default(now())
+  updatedAt DateTime                    @updatedAt
+
+  segments  TranscriptSegment[]
+  revisions TranscriptSegmentRevision[]
+}
+
+model TranscriptSegment {
+  id                 String                      @id @default(cuid())
+  transcriptId       String
+  transcript         Transcript                  @relation(fields: [transcriptId], references: [id], onDelete: Cascade)
+  speakerId          String
+  speaker            Speaker                     @relation(fields: [speakerId], references: [id], onDelete: Restrict)
+  segmentIndex       Int
+  startMs            Int
+  endMs              Int
+  sourceText         String
+  originalSourceText String
+  originalSpeakerId  String
+  confidence         Float
+  needsReview        Boolean                     @default(false)
+  version            Int                         @default(1)
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+
+  revisions          TranscriptSegmentRevision[]
+  translationSegment TranslationSegment?
+
+  @@index([transcriptId, segmentIndex])
+  @@index([speakerId])
+}
+
+model TranscriptSegmentRevision {
+  id                String            @id @default(cuid())
+  segmentId         String
+  segment           TranscriptSegment @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+  transcriptId      String
+  transcript        Transcript        @relation(fields: [transcriptId], references: [id], onDelete: Cascade)
+  editedByUserId    String
+  previousText      String
+  newText           String
+  previousSpeakerId String
+  newSpeakerId      String
+  version           Int
+  createdAt         DateTime          @default(now())
+
+  @@index([segmentId, createdAt])
+}
+
+model Translation {
+  id             String               @id @default(cuid())
+  jobId          String               @unique
+  job            DubJob               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  targetLanguage String               @default("vi")
+  status         String               @default("processing") // "processing" | "ready" | "failed"
+  provider       String               @default("context-llm-adapter")
+  model          String               @default("gemini-context-vi-1.0")
+  promptVersion  String               @default("vi-dub-context-v1")
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  segments       TranslationSegment[]
+}
+
+model TranslationSegment {
+  id                     String            @id @default(cuid())
+  translationId          String
+  translation            Translation       @relation(fields: [translationId], references: [id], onDelete: Cascade)
+  transcriptSegmentId    String            @unique
+  transcriptSegment      TranscriptSegment @relation(fields: [transcriptSegmentId], references: [id], onDelete: Cascade)
+  translatedText         String
+  originalTranslatedText String
+  status                 String            @default("ready") // "ready" | "failed" | "edited"
+  errorCode              String?
+  editedBy               String?
+  version                Int               @default(1)
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+
+  audioSegment           AudioSegment?
+
+  @@index([translationId])
+}
+
+model GlossaryEntry {
+  id         String   @id @default(cuid())
+  jobId      String
+  job        DubJob   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category   String   @default("term") // "proper_noun" | "term" | "pronoun_rule"
+  sourceTerm String
+  targetTerm String
+  speakerId  String?
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  @@index([jobId, category])
+}
+
+model Voice {
+  id                 String            @id
+  provider           String            @default("studio-tts-vi")
+  providerVoiceId    String            @unique
+  language           String            @default("vi")
+  displayName        String
+  genderPresentation String            // "female" | "male" | "neutral"
+  ageGroup           String            // "child" | "teen" | "young_adult" | "adult" | "senior"
+  styleTagsJson      String            // JSON array string e.g. '["trầm","tự tin"]'
+  previewUrl         String?
+  isActive           Boolean           @default(true)
+  createdAt          DateTime          @default(now())
+
+  assignments        VoiceAssignment[]
+  audioSegments      AudioSegment[]
+
+  @@index([language, isActive])
+}
+
+model VoiceAssignment {
+  id          String   @id @default(cuid())
+  jobId       String
+  job         DubJob   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  speakerId   String   @unique
+  speaker     Speaker  @relation(fields: [speakerId], references: [id], onDelete: Cascade)
+  voiceId     String
+  voice       Voice    @relation(fields: [voiceId], references: [id], onDelete: Restrict)
+  assignedBy  String   @default("ai") // "ai" | "user"
+  matchScore  Float    @default(0.85)
+  matchReason String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([jobId, speakerId])
+  @@index([jobId])
+}
+
+model VoicePreset {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  assignmentsJson String   // JSON array of { speakerSignature: string, voiceId: string }
+  createdAt       DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model AudioSegment {
+  id                   String             @id @default(cuid())
+  jobId                String
+  job                  DubJob             @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  translationSegmentId String             @unique
+  translationSegment   TranslationSegment @relation(fields: [translationSegmentId], references: [id], onDelete: Cascade)
+  speakerId            String
+  speaker              Speaker            @relation(fields: [speakerId], references: [id], onDelete: Cascade)
+  voiceId              String
+  voice                Voice              @relation(fields: [voiceId], references: [id], onDelete: Restrict)
+  startMs              Int
+  endMs                Int
+  durationMs           Int
+  rawDurationMs        Int
+  playbackRate         Float              @default(1.0)
+  storageKey           String
+  audioDataUrl         String?
+  status               String             @default("queued") // "queued" | "ready" | "failed"
+  timingStrategy       String?            // "natural" | "slight_speedup" | "silence_compression" | "timing_conflict"
+  errorCode            String?
+  version              Int                @default(1)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@index([jobId, startMs])
+  @@index([jobId, speakerId])
+}
+
+model SubtitleTrack {
+  id         String   @id @default(cuid())
+  jobId      String
+  job        DubJob   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  kind       String   // "source" | "target" | "bilingual"
+  language   String   @default("vi")
+  format     String   @default("vtt")
+  storageKey String
+  vttContent String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([jobId, kind])
+}
