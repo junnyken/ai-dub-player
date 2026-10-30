@@ -828,6 +828,47 @@ export class LiveAiBridge {
     }
 
     if (xmlContent.includes("<p ")) {
+      // Case A: Human-authored / pre-segmented <p t="..." d="..."> cues (no word-level <s tags)
+      if (!xmlContent.includes("<s")) {
+        const directCues: RawAsrUtterance[] = [];
+        const pRegex = /<p\s+t="(\d+)"(?:\s+d="(\d+)")?[^>]*>([\s\S]*?)<\/p>/gi;
+        let pMatch: RegExpExecArray | null;
+        while ((pMatch = pRegex.exec(xmlContent)) !== null) {
+          const pStartMs = parseInt(pMatch[1], 10);
+          const pDurMs = pMatch[2] ? parseInt(pMatch[2], 10) : 2500;
+          const plain = pMatch[3]
+            .replace(/<[^>]+>/g, " ")
+            .replace(/&amp;/g, "&")
+            .replace(/&lt;/g, "<")
+            .replace(/&gt;/g, ">")
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/\[(Music|Applause|Laughter)\]/gi, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+          if (!plain || plain.length < 2) continue;
+          directCues.push({
+            startMs: pStartMs,
+            endMs: pStartMs + Math.max(1000, pDurMs),
+            text: plain,
+            confidence: 0.96,
+          });
+        }
+        // Ensure >= 450ms gap between distinct cues so SegmentMerger keeps each sentence independent
+        for (let i = 0; i < directCues.length - 1; i++) {
+          const curr = directCues[i];
+          const next = directCues[i + 1];
+          if (next.startMs - curr.endMs < 450 && next.startMs - curr.startMs >= 1400) {
+            curr.endMs = next.startMs - 450;
+          } else if (curr.endMs >= next.startMs) {
+            curr.endMs = Math.max(curr.startMs + 500, next.startMs - 100);
+          }
+        }
+        const maxSegs = this.getSystemParameters().maxSegmentsPerJob || 120;
+        return directCues.slice(0, maxSegs);
+      }
+
+      // Case B: Auto-generated ASR <p> blocks containing word-level <s t="..."> tokens
       const wordTokens: TimedWordToken[] = [];
       const pRegex = /<p\s+t="(\d+)"(?:\s+d="(\d+)")?[^>]*>([\s\S]*?)<\/p>/gi;
       let pMatch: RegExpExecArray | null;
@@ -949,27 +990,28 @@ export class LiveAiBridge {
         mergedSentences.push(curr);
       }
 
-      // Give each sentence natural breathing room up to the next sentence start
+      // Give each sentence natural breathing room while keeping a >= 450ms gap so SegmentMerger does not glue separate sentences together
       for (let i = 0; i < mergedSentences.length; i++) {
         const curr = mergedSentences[i];
         const next = mergedSentences[i + 1];
         const idealMinEnd =
-          curr.startMs + Math.max(2400, curr.text.split(/\s+/).length * 320);
+          curr.startMs + Math.max(2200, curr.text.split(/\s+/).length * 300);
         if (next) {
+          const safeGapMs = next.startMs - curr.startMs >= 1600 ? 450 : 120;
           curr.endMs = Math.min(
             Math.max(curr.endMs, idealMinEnd),
-            next.startMs - 80
+            next.startMs - safeGapMs
           );
-          if (curr.endMs <= curr.startMs + 700) {
-            curr.endMs = Math.max(curr.startMs + 800, next.startMs - 40);
+          if (curr.endMs <= curr.startMs + 600) {
+            curr.endMs = Math.max(curr.startMs + 650, next.startMs - 80);
           }
         } else {
           curr.endMs = Math.max(curr.endMs, idealMinEnd);
         }
       }
 
-      // Return full video transcript (up to 120 segments instead of truncating at 12)
-      return mergedSentences.slice(0, 120);
+      const maxSegs = this.getSystemParameters().maxSegmentsPerJob || 120;
+      return mergedSentences.slice(0, maxSegs);
     }
 
     return [];
